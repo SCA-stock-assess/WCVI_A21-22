@@ -33,7 +33,7 @@ library(tidyverse)
 
 # ============================ REC data ============================
 
-# CREST BDWR ----------------------
+# CREST BDWR ----------------------   ***fix path NEXT DAY TO THE NETWORK LOCATION! 
 WCVIcrestBDWR <- readxl::read_excel(path=list.files(path=#"//ENT.dfo-mpo.ca/DFO-MPO/GROUP/PAC/PBS/Operations/SCA/SCD_Stad/WCVI/CHINOOK/WCVI_TERMINAL_RUN/Annual_data_summaries_for_RunRecons/CREST-BDWRcompile_base-files/2-Export-from-R/",
                                             here::here("data", "fisheries"),
                                           pattern="^R_OUT - Biological_Data_With_Results \\(.*\\) \\d{4}-\\d{4}\\.xlsx$", 
@@ -150,7 +150,16 @@ wcviPFMA_NitCatEst <- left_join(pfma_sf,
 
 
 
-# ============================ NITINAT data ============================
+
+# ============================ FOS COMMERCIAL data ============================
+fos.nit <- readxl::read_excel(path=here::here("data", "fisheries", "COMMERCIAL SALMON IN-SEASON CATCH ESTIMATES (IN PIECES) - INTERNAL USE ONLY.xlsx")) %>%
+  filter(estimate_type!="Total", !grepl("applied filter", estimate_type, ignore.case=T))
+
+
+
+
+
+# ============================ NITINAT HATCHERY biodata ============================
 nitAAB <- readxl::read_excel(path=list.files(path="//ENT.dfo-mpo.ca/DFO-MPO/GROUP/PAC/PBS/Operations/SCA/SCD_Stad/WCVI/CHINOOK/WCVI_TERMINAL_RUN/Annual_data_summaries_for_RunRecons/EPROcompile_base-files/2-Export-from-R/",
                                              pattern="^R_OUT - All Adult Biosampling ALL FACILITIES WITH RESULTS",
                                              full.names = T),

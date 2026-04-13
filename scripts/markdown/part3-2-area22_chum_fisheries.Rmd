@@ -1,0 +1,524 @@
+---
+title: "Nitinat Chum historical fisheries"
+author: "South Coast StA"
+date: "2026-03-16"
+output: 
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+    toc_collapsed: false 
+    toc_depth: 5
+    number_sections: true
+---
+
+<br>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning=F, message=F)
+
+# Nitinat chum fishery summary
+# Feb 2026
+# Test data pulled from FOS by John Fulton ~Oct 6, 2026
+# Comm data from PACHarv - internal use only 
+
+
+# Set up ---------------------
+library(tidyverse)
+options(scipen = 99999)
+
+
+# ==================== Read data ====================
+
+## Chum test data (historical)  ---------------------
+cm.test <- readxl::read_excel(path = here::here("data", "fisheries", "Nitinat Chum Gillnet Test Data 2000-2012.xlsx"),
+                              sheet = "Set Data") %>%
+  janitor::clean_names() %>%
+  mutate(crpt_date = lubridate::dmy_hm(crpt_date),
+         date = as.Date(crpt_date),
+         DOY = lubridate::yday(date),
+         across(c(net_start_out:net_full_in), ~lubridate::mdy_hms(.)),
+         soak_time = as.numeric(difftime(net_full_in, net_full_out, units="hours")),
+         effort_MD = soak_time * as.numeric(net_length)) %>%
+  pivot_longer(cols=c(sockeye_adult_kept:dogfish_rel), names_to = "spp_stage", values_to = "n") %>%
+  mutate(disposition = case_when(grepl("kept", spp_stage) ~ "Kept",
+                                 grepl("rel", spp_stage) ~ "Released"),
+         maturity_class = case_when(grepl("adult", spp_stage) ~ "Adult",
+                                    grepl("jack", spp_stage) ~ "Jack"),
+         maturity_class = case_when(is.na(maturity_class) ~ "Adult",
+                                    TRUE ~ maturity_class),
+         spp_stage = stringr::str_to_title(sub("\\_.*", "", spp_stage))) %>%
+  rename(species = spp_stage,
+         catch = n) %>%
+  relocate(catch, .after = maturity_class) %>%
+  relocate(maturity_class, .before = disposition) %>%
+  pivot_wider(names_from = disposition, values_from = catch) %>%
+  mutate(landed_catch = Kept + Released,
+         CPUE = landed_catch/effort_MD) %>%
+  left_join(.,
+            data.frame(DOY = seq(245,335, by=1),
+                       day_num = seq(1,91, by=1)),
+            by="DOY")
+
+
+
+
+## Chum run timing (historical) ---------------------
+cm.timing <- readxl::read_excel(path = here::here("data", "fisheries", "Nitinat_Timing_Curves.xls"),
+                              sheet = "for_R") %>%
+  janitor::clean_names() %>%
+  rename(DOY = doy)
+
+
+
+## Chum commercial data (historical) ---------------------
+### Area 21 ---- 
+comm.21 <- readxl::read_excel(here::here("data", "fisheries", 
+                                         "COMMERCIAL SALMON IN-SEASON CATCH ESTIMATES (IN PIECES) - INTERNAL USE ONLY.xlsx"),
+                              sheet="Export") %>%
+  janitor::clean_names() %>%
+  filter(estimate_type != "Total", !is.na(estimate_type)) %>%
+  pivot_longer(cols=c(sockeye_kept:steelhead_reld), names_to = "species", values_to = "pieces") %>% 
+  mutate(disposition = case_when(grepl("kept", species, ignore.case=T) ~ "Kept",
+                                 grepl("reld", species, ignore.case=T) ~ "Released"),
+         species = sub("_.*", "", species),
+         year = lubridate::year(fishing_date)) 
+
+
+### Area 22 ----
+comm.22 <- readxl::read_excel(here::here("data", "fisheries", "1952 to 1995 Commercial Salmon Catch in PacHarv3(PACHARV_V3_0_CATCH_SUMMARY_VW) to Date.xlsx"),
+                              sheet = "JIRA-FISHDATA-3956_BRENDAN") %>%
+  janitor::clean_names() %>%
+  filter(area=="management area 22")
+
+
+## Chum commercial data (historical) ---------------------
+dfn.gn <- readxl::read_excel(here::here("data", "fisheries", "Ditidaht Gillnet Data (2015-2021).xlsx"),
+                             sheet="CombinedDataSet") %>%
+  janitor::clean_names()
+
+
+
+## Chum escapement ---------------------
+new.esc <- readxl::read_excel(path = "//ENT.dfo-mpo.ca/DFO-MPO/GROUP/PAC/PBS/Operations/SCA/SCD_Stad/WCVI/ESCAPEMENT/Data/NEW ESCAPEMENT INDEX.xls",
+                              sheet = "EscData", skip=4) %>%
+  janitor::clean_names()
+```
+
+```{r eval=F}
+# ==================== Data exploration/summary ====================
+
+## Number of sets usually done per day/site -------------
+View(cm.test %>%
+       filter(set_type == "ASSESSMENT") %>%
+       group_by(opng_year, date, location) %>%
+       summarize(n_sets = n()))
+
+ggplot(data = cm.test %>%
+         filter(set_type == "ASSESSMENT") %>%
+         group_by(opng_year, DOY, location) %>%
+         summarize(n_sets = n())) +
+  geom_point(aes(x=DOY, y=n_sets, fill=opng_year, colour=opng_year), size=4) +
+  facet_wrap(~location)
+
+
+## Chum releases common? -------------
+cm.test %>%
+  filter(species=="Chum", maturity_class == "Adult", set_type == "ASSESSMENT", set_condition == "GOOD SET") %>%
+  group_by(opng_year) %>%
+  summarize(sum(Released, na.rm=T))
+# basically only 2009
+
+
+## Soak times -------------
+cm.test %>%
+  filter(species=="Chum", maturity_class == "Adult", set_type == "ASSESSMENT", set_condition == "GOOD SET",
+         soak_time>=0) %>%
+  summarize(min = min(soak_time, na.rm=T),
+            max = max(soak_time, na.rm=T))
+
+## Number of sets -------------
+View(cm.test %>%
+  filter(species=="Chum", maturity_class == "Adult", set_type == "ASSESSMENT", set_condition == "GOOD SET",
+         soak_time>=0) %>%
+  group_by(date, location) %>%
+  summarize(n()))
+```
+
+# Nitinat Chum summary
+
+## Run timing
+
+### Lake
+
+Historical Nitinat run timing models (e.g., Nitinat_Timing_Curves.xls) appear to be based on theoretical statistical distributions (normal or non-normal [1]) applied to a total run size of 833,000, rather than on observed catch information. The parameters and data used within these theoretical models are also not documented with headers, units, etc. making it difficult to replicate results. That being said, these models are currently the best sources of information we have to predict Nitinat Chum run timing in Nitinat Lake. Figure 1 shows the statistical models with observed catch data from 2003 overlaid. 
+
+The models (taken at face value) indicate Chum run timing peaks ~Oct 8-13 in the lake, and >90% of the fish should be in the lake by ~Oct 19-Nov 2 (100% in the lake by ~Nov 17-30), depending on the model used (Figure 1). Visual comparison to observed catch data from 2003 indicates the normally-distributed model likely represents the run timing better than the beta-distributed model, although this should be further confirmed with more observed catch data (see test fishing section below).
+
+*[1] The Nitinat_Timing_Curves.xls file lists this as a Beta-distributed model, but a cursory search suggests this is a Gamma-distributed model. This document will refer to it as a Beta-distributed model to be consistent with attached files.*
+
+```{r fig.cap='Figure 1. Statistical models of Chum run timing in Nitinat Lake. A) Beta-distribution predicted run timing with B) cumulative observed catch data (as a proportion of the total run) overlaid from 2003. C) Normally-distributed predicted run timing with D) cumulative observed catch data (as a proportion of the total run overlaid from 2003. Note there are no metadata associated with the 2003 data supplied in this figure; catch could represent test, commercial or broodstock seine. Figures from Nitinat_Timing_Curves.xls'}
+
+knitr::include_graphics(here::here("data", "fisheries", "chum_runtiming_figs.png"))
+```
+
+<br>
+
+### River
+
+[run timing tables figs here]
+
+<br>
+
+## 2026 Estimated run strength
+
+At the time of this report the pre-season Chum forecast for WCVI is not available. However, the 2026 Outlook is available as is a cursory examination of the contributing brood-years to the upcoming return. 
+The 2026 Outlook for WCVI Chum is category 2, indicating an anticipated “below average” return, despite improvements in marine survival recently (DFO 2026). 
+
+```{r}
+new.esc %>%
+  filter(system=="Nitinat", year %in% c((2026-5):(2026-3))) %>%
+  select(year, system, chum_esc, brd_rem_cm) %>%
+  mutate(`Chum river spawners` = format(as.numeric(chum_esc)-as.numeric(brd_rem_cm), big.mark=",")) %>%
+  rename(`Chum broodstock` = brd_rem_cm,
+         `Chum total escapement (broodstock+river spawners)` = chum_esc,
+         Year=year, System=system) %>%
+  relocate(`Chum total escapement (broodstock+river spawners)`, .after = `Chum river spawners`) %>%
+  mutate(`Chum broodstock` = format(`Chum broodstock`, big.mark=","),
+         `Chum total escapement (broodstock+river spawners)` = format(`Chum total escapement (broodstock+river spawners)`, big.mark=",")) %>%
+  kableExtra::kbl(caption = "Brood year escapements for Nitinat Chum contributing to the 2026 return.", align = "c") %>%
+  kableExtra::kable_classic(full_width = F, html_font = "Arial") %>%
+  kableExtra::row_spec(0, bold = T) 
+```
+
+Given that the escapement target for Nitinat Chum is 175,000 (fishery reference points are 225,000 minimum escapement and 325,000 target fishery reference point), the upcoming return for 2026 does not look promising for a commercial opening in Nitinat Lake.
+The formal WCVI Chum forecast will be available Spring 2026.
+
+<br>
+
+# Historical test fishing
+
+A gillnet test fishery operated in Nitinat Lake until ca. 2012. The fishery was operated using two Ditidaht First Nation boats, *Rumours I* and *Midnight Raider*. Catch data available in the Fishery Operating System (FOS) span from 2000-2012 (inclusive). Test fishing zones established in Nitinat Lake spanned the majority of the Lake areas, but excluded the head of the Lake near the Nitinat River mouth (Zone 5) and The Flats/Gap (Zone 1; Figure 2). Zone 5 was excluded from test fishing so as to provide an area for the Nitinat River Hatchery to collect broodstock via seine net; Zone 1 was presumably not fished frequently due to safety concerns. 
+
+```{r out.width="70%", fig.align="center"}
+knitr::include_graphics(here::here("data", "fisheries", "Nitinat_test_map.jpg"))
+```
+
+Figure 2. Nitinat Lake historical test fishing zones and set locations.
+
+<br>
+
+## Catch
+
+Average catch-per-unit-effort (CPUE) [2] was relatively constant among Zones 2-4 (Figure 3). Soak times recorded ranged from minutes to 4 hours. The majority of fishing was limited to one set per zone each day, although a handful of cases received 2-3 sets per zone, per day. Average daily catch (uncorrected for effort) rarely exceeded 500 Chum per zone, per day (Figure 4).
+
+*[2] CPUE = (Total catch)/((net length × soak time)) ; where total catch is the sum of kept and released catch, soak time is in hours and net length is in metres. The units of CPUE are therefore in metre-hours, often scaled up to catch per 100 metre-hours.*
+
+```{r}
+# ================== CPUE ==================
+# For sets where we have soak time and net length 
+
+## Site ~ time ----------------
+cm_CPUE_site <- cm.test %>%
+  filter(species=="Chum", maturity_class == "Adult", set_type == "ASSESSMENT", set_condition == "GOOD SET") %>%
+  group_by(opng_year, DOY, location) %>% 
+  summarize(total_CPUE = sum(CPUE, na.rm=T)) %>%
+  group_by(DOY, location) %>%
+  summarize(mean_CPUE = mean(total_CPUE, na.rm=T),
+            sd_CPUE = sd(total_CPUE, na.rm=T)) 
+
+
+## Zone ~ time ----------------
+cm_CPUE_zone <- cm.test %>%
+  filter(species=="Chum", maturity_class == "Adult", set_type == "ASSESSMENT", set_condition == "GOOD SET") %>%
+  group_by(opng_year, DOY, zone) %>% 
+  summarize(total_CPUE = sum(CPUE, na.rm=T)) %>%
+  group_by(DOY, zone) %>%
+  summarize(mean_CPUE = mean(total_CPUE, na.rm=T)*100,
+            sd_CPUE = sd(total_CPUE, na.rm=T)*100)
+
+cm_CPUE_zone$zone <- factor(cm_CPUE_zone$zone, levels = c("Zone 2", "Zone 3", "Zone 4", "Zone 5/4 Boundary", "Zone 5", 
+                                                          "Nitinat Lake (unspecified)", "Unknown (Picnic / Hickey / Camp)"), ordered=T)
+
+
+
+# ================== Observed catch ==================
+
+## Zone ~ time ----------------
+cm_catch_zone <- cm.test %>%
+  filter(species=="Chum", maturity_class == "Adult", set_type == "ASSESSMENT", set_condition == "GOOD SET") %>%
+  group_by(opng_year, DOY, zone) %>% 
+  summarize(total_landed = sum(landed_catch, na.rm=T)) %>%
+  group_by(DOY, zone) %>%
+  summarize(mean_landed = mean(total_landed, na.rm=T),
+            sd_landed = sd(total_landed, na.rm=T)) 
+
+
+cm_catch_zone$zone <- factor(cm_catch_zone$zone, levels = c("Zone 2", "Zone 3", "Zone 4", "Zone 5/4 Boundary", "Zone 5", 
+                                                            "Nitinat Lake (unspecified)", "Unknown (Picnic / Hickey / Camp)"), ordered=T)
+```
+
+```{r fig.align="center", fig.cap='Figure 3. a) Mean CPUE (Chum catch per 100 metre-hours) for sets where soak time and net length information were available, and b) mean observed catch for Nitinat Lake Chum test fishery. Data were averaged across all years. Error bars represent one standard deviation. Data exclude non-assessment and bad/botched sets.'}
+ggplot(data = cm_CPUE_zone %>%
+         filter(mean_CPUE >= 0, mean_CPUE!="Inf")) +
+  geom_errorbar(aes(x=as.Date(DOY, origin="01-01-2000"), ymax=mean_CPUE+sd_CPUE, ymin=mean_CPUE-sd_CPUE,
+                    colour = str_wrap(zone, width=14)), width=0.2, linewidth=1, alpha=0.8) +
+  geom_point(aes(x=as.Date(DOY, origin="01-01-2000"), y=mean_CPUE, fill=str_wrap(zone, width=14), 
+                 colour=str_wrap(zone, width=14)),
+             size=5, shape=21, alpha=0.8) +
+  annotate(geom="text", x=as.Date(268, origin="01-01-2000"), y=1490, label="A", fontface="bold", size=6) +
+  scale_y_continuous(limits=c(NA, NA)) +
+  scale_x_date(date_breaks="5 day", date_labels="%b %d") +
+  scale_fill_discrete() +
+  scale_colour_discrete() +
+  labs(y = "Mean CPUE (+/- SD)", fill="Test zone", colour="Test zone") +
+  theme_bw() +
+  theme(axis.text = element_text(colour="black", size=13),
+        axis.text.x = element_text(angle=45, hjust=1),
+        axis.title = element_text(face="bold", size=15),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=13),
+        legend.title = element_text(face="bold", size=13),
+        legend.text = element_text(size=12),
+        legend.key.spacing.y = unit(3, "mm")) #+
+  #facet_wrap(~zone)
+
+
+ggplot(data = cm_catch_zone) +
+  geom_errorbar(aes(x=as.Date(DOY, origin="01-01-2000"), ymax=mean_landed+sd_landed, ymin=mean_landed-sd_landed, 
+                    colour=str_wrap(zone, width=14)), linewidth = 0.7, width=0.2, alpha=0.8) +
+  geom_point(aes(x=as.Date(DOY, origin="01-01-2000"), y=mean_landed, fill=str_wrap(zone, width=14), 
+                 colour=str_wrap(zone, width=14)), size=5, shape=21,
+             alpha=0.8) +
+  annotate(geom="text", x=as.Date(268, origin="01-01-2000"), y=1490, label="B", fontface="bold", size=6) +
+  scale_y_continuous(limits=c(NA, NA)) +
+  scale_x_date(date_breaks="5 day", date_labels="%b %d") +
+  labs(y = "Mean observed catch (+/- SD)", fill="Test zone", colour="Test zone") +
+  theme_bw() +
+  theme(axis.text = element_text(colour="black", size=13),
+        axis.text.x = element_text(angle=45, hjust=1),
+        axis.title = element_text(face="bold", size=15),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=13),
+        legend.title = element_text(face="bold", size=13),
+        legend.text = element_text(size=12)) #+
+```
+
+<br>
+
+## Run timing
+
+When overlaying the observed (uncorrected) historical test fishery catch data on the statistical run timing models given above, there appears to be a close relationship between observed test fishery catch and the normally-distributed model (Figure 5). It is unclear whether the test fishery catch is what informed the model development, or if it indicates a promising model fit (i.e., the two may not be independent).  
+
+```{r}
+## Cuml timing overlaid ----------------
+cm_test_cuml <- cm.test %>%
+  filter(species=="Chum", maturity_class == "Adult", set_type == "ASSESSMENT", set_condition == "GOOD SET") %>%
+  group_by(opng_year, DOY) %>%
+  summarize(total = sum(landed_catch, na.rm=T)) %>%
+  mutate(cuml_catch = cumsum(total)) %>%
+  group_by(opng_year) %>%
+  mutate(cuml_propn = cuml_catch/sum(total))
+```
+
+```{r fig.align="center", fig.cap='Figure 5. Chum run timing models (beta- and normally-distributed) with overlaid observed gillnet test fishery catch data. The “observed 2003 catch” given in Figure 1 is shown here as black X’s for comparison to the 2003 test fishery catch.'}
+ggplot() +
+  geom_line(data = cm.timing,
+             aes(x=DOY, y=pred_cuml_propn, group=model), size=1) +
+  geom_point(data = cm.timing,
+             aes(x=DOY, y=catch_2003), size=2, shape=4, stroke=1.5) +
+  geom_point(data=cm_test_cuml,
+             aes(x=DOY, y=cuml_propn, colour=opng_year, fill=opng_year), size=3, shape=21) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  scale_x_date(date_breaks = "10 day", date_labels = "%b %d") +
+  labs(y = "Cumulative proportion of Chum run", fill="Year", colour="Year") +
+  theme_bw() +
+  theme(axis.text = element_text(colour="black", size=13),
+        axis.text.x = element_text(angle=45, hjust=1),
+        axis.title = element_text(face="bold", size=15),
+        axis.title.x = element_blank() ,
+        strip.text = element_text(size=13),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=13, face="bold")) +
+  facet_wrap(~model)
+```
+
+<br>
+
+<br>
+
+## Considerations for future Nitinat Lake test fishery development
+
+- Biological sampling of Chum catch, including lab capacity and budget to process samples
+- Catch monitoring including by-catch. Consider FOS with real-time access at www.pacfish.ca/testfish 
+- Fishing plan development
+  + Sites/zones
+  + Consistent effort (net size, soak time, number of sets)
+  + Catch monitoring logistics (to whom, when, how)
+  + Buyer organized and available 
+  + On-board observer
+- Legal/operational requirements
+  + Transport Canada certified vessels/operators
+  + Fishing licenses acquired 
+- Contingency for when to cease test fishing operations in the event of a low return
+  + Or required forecast threshold to even initiate a test fishery? 
+- Refinement of target fishery reference points
+- Refinement of run timing model
+- ...
+
+<br>
+
+<br>
+
+# Historical Area 22 fishery
+
+Area 22 has not had a commercial fishery opening in recent history. Most catch was limited to between the 1950s-90s, and was largely either seine or gillnet based. Limited data are available in the PACHARV database which can only be accessed internally and is labelled as "non-ATIPable". **Therefore the results here are for internal use only.**
+
+For the years available, relative catch trends between the two gear types for Chum were relatively consistent, but with the seines usually harvesting more per year compared to gillnet (Figure 6). Gillnet catch was historically at or less than 50,000 pieces of Chum with the exception of 1972. 
+
+```{r}
+comm.22.cm <- comm.22 %>%
+  filter(species=="CHUM SALMON") %>%
+  group_by(year, gear_nme) %>%
+  summarize(total_pcs = sum(total_pieces, na.rm = T))
+
+comm.22.all <- comm.22 %>%
+  mutate(gear_simple = case_when(grepl("troll", gear_nme, ignore.case=T) ~ "TROLL",
+                                 TRUE ~ gear_nme)) %>%
+  group_by(year, gear_simple, species) %>%
+  summarize(total_pcs = sum(total_pieces, na.rm = T))
+```
+
+```{r fig.align='center', fig.cap='Figure 6. Historical commercial fisheries catch of Chum (pieces) in Nitinat Lake. Data accessed from the PACHARV database for internal use only.'}
+ggplot(data = comm.22.cm) +
+  geom_bar(aes(x=year, y=total_pcs), stat="identity", alpha=0.8) +
+  scale_x_continuous(breaks=scales::breaks_width(2)) +
+  scale_y_continuous(labels = scales::label_comma()) +
+  labs(y="Total pieces") +
+  theme_bw() +
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title = element_text(face="bold"),
+        axis.text = element_text(colour="black")) +
+  facet_wrap(~gear_nme, scales="free_y", nrow=4)
+```
+
+<br>
+
+The gillnet proved to have the largest historical by-catch of all fishing methods, with almost 25,000 Sockeye caught in a single year (Figure 7). These could be either Hobiton, Nitinat or Doobah Sockeye, all of which have populations nowhere near this abundance in present day. Coho followed as the next most common by-catch species, primarily for the seine and troll (Figure 7). Steelhead by-catch was relatively low; 38 were harvested in 1953, 55 in 1954, and between 1-4 in the 1970s and 1980s.  
+
+```{r fig.align='center', fig.cap='Figure 7. Historical commercial fisheries catch of non-Chum (pieces) in Nitinat Lake. Data accessed from the PACHARV database for internal use only.'}
+ggplot() +
+  geom_bar(data = comm.22.all %>%
+             filter(species!="CHUM SALMON"),
+           aes(x=year, y=total_pcs, fill = species, colour=species), stat="identity", alpha=0.8) +
+  scale_x_continuous(breaks=scales::breaks_width(3)) +
+  scale_y_continuous(labels = scales::label_comma()) +
+  labs(y="Total pieces") +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.title = element_text(face="bold"),
+        axis.text = element_text(colour="black")) +
+  facet_wrap(~gear_simple, scales="free_y", nrow=4)
+```
+
+<br>
+
+## Considerations for future Nitinat Lake commercial opening
+
+The following considerations need to be met in order to ensure an appropriate level of commercial Chum fishing in Nitinat Lake:
+
+- Harvest of non-target species/stocks:
+  + Steelhead: these should not be present in the Lake, unless kelts on their way back to sea are encountered. 
+  + Hobiton Chum: While Hobiton has a spawn timing ~2-3 weeks later than Nitinat, it is expected that co-migration likely occurs in the lower end of the lake leading up to Hobiton. Fishery mitigation to avoid impacts to Hobiton Chum could include only fishing in test zones 4, although this significantly limits the extent of fishing possible. A large exclusion zone should be placed around Hobiton and Doobah mouths at minimum. 
+  + Coho: Impacts to Nitinat coho could be considerable given the similar run timing, especially for the seine net which appears to capture coho more readily than gillnets (Figure 7). 
+  + Chinook: depending on fishery timing, Chinook may be encountered but most should be into the top end of the lake/river. Rolling openings that start after Chinook have entered the river and that begin at the narrows and move towards the mouth may allow straggling Chinook time to enter the River/make it to the hatchery seine. 
+- Disproportionate harvest to effort: Nitinat Lake is highly stratified and only has a habitable surface layer of ~20-30ft. During times of intense stratification fish are confined to the surface where fishing effort may disproportionately impact fish. Conversely, when lake turnover occurs there is often a lot of pre-spawn mortality, which needs to be monitored to cease fishing efforts immediately in order to avoid increased mortality from both fishing and environmental conditions. In-season management should make use of the MC Wright weather station/forecast to create early warnings based on sustained NW winds, and the fishery should temporarily cease if a turnover event seems likely to occur. 
+- Catch reporting - there is no cell or wifi service anywhere at Nitinat. How do managers/biologists get in-season data? 
+
+<br>
+
+<br>
+
+# DFN catch Area 22
+
+```{r}
+dfn.cm <- dfn.gn %>%
+  group_by(year) %>%
+  summarize(total_cm_pcs = sum(total_chum, na.rm=T))
+```
+
+```{r, fig.align='center', fig.cap='Ditidaht First Nation Chum gillnet catch (pieces) in recent years.'}
+ggplot() +
+  geom_bar(data=dfn.cm, aes(x=year, y=total_cm_pcs), stat="identity") +
+  scale_y_continuous(labels = scales::label_comma()) +
+  scale_x_continuous(breaks=scales::breaks_width(1)) +
+  labs(y="Total pieces") +
+  theme_bw() +
+    theme(axis.title.x = element_blank(),
+        axis.title = element_text(face="bold"),
+        axis.text = element_text(colour="black"))
+```
+
+<br>
+
+<br>
+
+# Historical Area 21 fishery
+
+```{r}
+comm.21.cm <- comm.21 %>%
+  filter(species=="chum", !is.na(gear_type)) %>%
+  group_by(year, gear_type) %>%
+  summarize(total_pcs = sum(pieces,na.rm=T))
+
+comm.21.all <- comm.21 %>%
+  filter(species!="chum", !is.na(gear_type)) %>%
+  group_by(year, gear_type, species) %>%
+  summarize(total_pcs = sum(pieces,na.rm=T))
+```
+```{r fig.align='center', fig.cap='Figure 8. Commercial Chum catch outside of Nitinat Lake, Area 21. Data from PACHARV database for internal use only.'}
+ggplot() +
+  geom_bar(data = comm.21.cm, aes(x=year, y=total_pcs), stat="identity", width=0.5) +
+  scale_x_continuous(breaks=scales::breaks_width(1)) +
+  scale_y_continuous(labels = scales::label_comma()) +
+  labs(y="Total pieces") +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.title = element_text(face="bold"),
+        axis.text = element_text(colour="black")) +
+  facet_wrap(~gear_type, nrow=2)
+```
+
+<br>
+
+```{r fig.align='center', fig.cap='Figure 9. Commercial catch of non-Chum species outside of Nitinat Lake, Area 21. Data from PACHARV database for internal use only. '}
+ggplot() +
+  geom_bar(data = comm.21.all, 
+           aes(x=year, y=total_pcs, fill = species, colour=species), stat="identity", alpha=0.8) +
+  scale_x_continuous(breaks=scales::breaks_width(1)) +
+  scale_y_continuous(labels = scales::label_comma()) +
+  labs(y="Total pieces") +
+  theme_bw() +
+  theme(axis.title.x = element_blank(),
+        axis.title = element_text(face="bold"),
+        axis.text = element_text(colour="black")) +
+  facet_wrap(~gear_type, scales="free_y", nrow=4)
+```
+
+<br>
+
+<br>
+
+# Attachments 
+
+1. Historical test fishing catch: Nitinat Chum Gillnet Test Data 2000-2012.xlsx
+2. Historical run timing: Nitinat_Timing_Curves.xls
+
+
+<br>
+
+<br>
+
+# References
+
+DFO. 2026. Pacific Salmon Outlook Pacific Region 2026: Part I – Preliminary Outlooks. 1-55 pp. https://waves-vagues.dfo-mpo.gc.ca/library-bibliotheque/41316605.pdf

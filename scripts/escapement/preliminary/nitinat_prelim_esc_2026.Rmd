@@ -645,8 +645,7 @@ escEstSpp %>%
 <br>
 
 ### Estimate decision:
-Used PL+D as we didn't quite get a good AUC curve this year. Expanded for vis and unsurveyed sections early on (e.g., upper) as early rainfall in ~Aug likely allowed upper river access early and potential for missing SK. Type-4 because still decent coverage. 
- 
+
 
 <br>
 
@@ -1094,8 +1093,6 @@ escEstSpp %>%
 <br>
 
 ### Estimate decision:
-Removed heli survey as not relevant for CO. Generally good coverage and water levels for surveys, though not timed exactly for peak CO spawn (surveys end a bit early). 50-60 Coho noted in Worthless anecdotally late Oct/early Nov, but assume these were counted as part of mainstem counts. Subtracted swim-ins due to good swim coverage, assume most fish counted in the lower river were likely headed for the hatchery. Also relatively high mark rate this year (87%) suggests lots of hatchery-bound fish.
-
 
 
 <br>
@@ -1552,14 +1549,6 @@ escEstSpp %>%
 
 ### Estimate decision:
 
-Assumed the following for broodstock operations:
-- Swim-ins mostly came in after the peak heli count on Oct 21. There were only ~2100 holding Chum counted on that flight, but 8,334 Chum swam into the hatchery. The flight noted that counting was often difficult at edges and in deep, dark pools, so it's possible that fish holding in pools (not spawning) were missed. Therefore **the swim-ins should be in addition to the river escapement estimate**. 
-
-Chum arrival this year was quite late for Nitinat, which also tracks elsewhere on the island: Johnstone Strait test fishery saw a very late, large bump of Chum just days before the fishery was set to close. This is reflected in several of the figures above. Note in the behavioural figures, Chum arrived and were immediately fungus-y and spawning. In particular, there was a massive bump sometime between Oct 16 and 21st; when we flew Oct 21 those fish were already all entirely spawning, which implies a very short residence time. For this reason, we selected the expanded AUC estimate with the shorter survey life (8 days). 
-
-This means the estimate would be `r escEstSpp[escEstSpp$ShortSpecies=="CM" & escEstSpp$SystemName=="Nitinat River, Nitinat Lake",]$AdultExpAUCHighValue` and the swim-ins (`r nrh.cm %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Male", "Female"), grepl("Swim Ins", inventory_lot)) %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n)`) would be in addition to it (so they don't need to be accounted for here). This is because the swims mostly noted spawning Chum, and the big push came into the hatchery after the peak heli flight which was mostly spawning fish. There were also anecdotal reports of late Chum coming into Narrows after the flight. Recommended mid-Auc because expansion seemed to high otherwise. Selected the shorter AUC estimate because of hatchery anecdotal info and also to account for missed fish on flight, and that early on fish were very fungus-y and likely turned-over fast. 
-
-Note this year may be a low estimate due to two lake turnover events: September 17 and October 14. On the Sept 17th event, the hatchery lost ~3000 Chinook broodstock that were being held in the lake pens. There was speculation that fish in the lake may have been able to swim away and avoid the low oxygen conditions, while those stuck in the pens died. However, the extent of the die off from both events is unknown. Hatchery staff reported the lake smelled like rotten eggs on Oct 14 as well (presumably due to anoxic layer coming to surface). The early event would have impacted Chinook more, while the later event would have impacted Chum more (if there were impacts). 
 
 <br>
 
@@ -1997,34 +1986,7 @@ escEstSpp %>%
 <br>
 
 ### Estimate decision:   
-
-Prior to this RMarkdown script I had already decided to omit the heli survey this year as it was not timed well for Chinook, and the counting was difficult in cases where Chinook might be post-spawn (pools, edges). This is reflected in most, if not all of the graphs with the survey omitted. 
-
-In 2025, assumed the following for broodstock operations:
-- River beach seine on Sept 23 fish were removed right before a swim and it's possible they entered since the last swim on Sept 12. Therefore, **beach seine removals need to be ADDED to the escapement estimate**. 
-- Assume most of the swim-ins were captured in the Sept 25/Oct 8 swims - on Sept 25 the vast majority were in the lower river, none spawning. Roughly the same number were observed 1 week later, but much more spawning this time, though still lots of holding fish in the lower not committed to a location yet. The swim period captured the swim in period well, and I expect that the AUC expansions and accounting for survey life will capture these fish within the estimate. Therefore **swim-ins need to be removed from the final estimate**.
-
-Opted for the middle-range SL for AUC for the preliminary estimate as the run timing was normal, despite the lake turnover events, low early water, and overall odd year for Chum arrival (late). Chinook entered the system early Sept which may have been a bit late, but was not linked to much of a rain event. Chinook already peaked in the system by the major rains, and spawn/die-off timing was relatively normal and predictable. No tributaries to account for this year. 
-
-Therefore, the final estimate for adult Chinook should be 
-`r escEstSpp[escEstSpp$ShortSpecies=="CN" & escEstSpp$SystemName=="Nitinat River, Nitinat Lake",]$AdultExpAUCMidValue_R` 
-minus 
-`r nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Male", "Female"), grepl("Swim Ins", inventory_lot)) %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n)` swim-ins, 
-plus 
-`r nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Male", "Female"), operations_location=="Nitinat R") %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n)` seined fish, 
-**resulting in** `r escEstSpp[escEstSpp$ShortSpecies=="CN" & escEstSpp$SystemName=="Nitinat River, Nitinat Lake",]$AdultExpAUCMidValue_R - nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Male", "Female"), grepl("Swim Ins", inventory_lot)) %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n) + nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Male", "Female"), operations_location=="Nitinat R") %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n)` **adults**
-
-**and** 
-
-`r escEstSpp[escEstSpp$ShortSpecies=="CN" & escEstSpp$SystemName=="Nitinat River, Nitinat Lake",]$JackExpAUCMidValue_R` 
-minus 
-`r nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Jack"), grepl("Swim Ins", inventory_lot)) %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n)` swim-ins, 
-plus 
-`r nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Jack"), operations_location=="Nitinat R") %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n)` seined fish, 
-**resulting in** 
-`r escEstSpp[escEstSpp$ShortSpecies=="CN" & escEstSpp$SystemName=="Nitinat River, Nitinat Lake",]$JackExpAUCMidValue_R - nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Jack"), grepl("Swim Ins", inventory_lot)) %>% summarize(n=sum(total_count, na.rm=T)) %>% pull(n) + nrh.cn %>% filter(parent_activity_type=="Adult Capture", maturity_class %in% c("Jack"), operations_location=="Nitinat R") %>% summarize(n=sum(total_count,na.rm=T)) %>% pull(n)` **jacks.**
-
-Note this year may be a low estimate due to two lake turnover events: September 17 and October 14. On the Sept 17th event, the hatchery lost ~3000 Chinook broodstock that were being held in the lake pens. There was speculation that fish in the lake may have been able to swim away and avoid the low oxygen conditions, while those stuck in the pens died. However, the extent of the die off from both events is unknown. Hatchery staff reported the lake smelled like rotten eggs on Oct 14 as well (presumably due to anoxic layer coming to surface). The early event would have impacted Chinook more, while the later event would have impacted Chum more (if there were impacts). 
+ 
 
 <br>
 
@@ -2153,7 +2115,6 @@ escEstSpp %>%
 
 ### Estimate decision:
 
-PL+D wherever seen. 
 
 <br>
 
